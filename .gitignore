@@ -1,2 +1,5 @@
 
 .ipynb_checkpoints/main_notebook-checkpoint.ipynb
+*.pyc
+*.pdf
+*.csv

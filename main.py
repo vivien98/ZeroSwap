@@ -58,10 +58,10 @@ def get_args():
     parser.add_argument('--max_episodes', type=int, default=1, help='Number of training episodes')
     parser.add_argument('--ema_base', type=int, default=-1, help='exponential moving average')
     
-    parser.add_argument('--alpha', type=float, default=0.9, help='Percentage of informed traders')
+    parser.add_argument('--ALPHA', type=float, default=0.9, help='Percentage of informed traders')
     parser.add_argument('--vary_informed', type=bool, default=False, help='vary the informed trader proportion')
     
-    parser.add_argument('--sigma', type=float, default=1.0, help='Probability of price jump')
+    parser.add_argument('--SIGMA', type=float, default=1.0, help='Probability of price jump')
     parser.add_argument('--vary_jump_prob', type=bool, default=False, help='vary the volatility')
     
     parser.add_argument('--jump_size', type=int, default=1, help='Size of price jump')
@@ -103,7 +103,7 @@ def get_args():
 
 args = get_args()
 
-print("Initializing GM model with params ALPHA = {0}, SIGMA = {1}".format(args.alpha,args.sigma))
+print("Initializing GM model with params ALPHA = {0}, SIGMA = {1}".format(args.ALPHA,args.SIGMA))
 
 # Define the initial true price, initial spread
 p_ext = 1000
@@ -114,17 +114,17 @@ mu = 18
 spread_exp = 1 # spread penalty = - mu * (spread)^(spread_exp)
 
 max_history_len = 21 # history over which imbalance calculated
-max_episode_len = 20000 # number of time slots
+max_episode_len = 2 # number of time slots
 max_episodes = 120 # number of episodes
 average_over_episodes = True # Plot average of metric over episodes?
 start_average_from = 20 # Take average in steady state after these manyn epsodes
 ema_base = -1 #0.97 # exponential moving average - set to -1 if want to use moving window instead
 
-informed = args.alpha # ALPHA : percentage of informed traders
+informed = args.ALPHA # ALPHA : percentage of informed traders
 vary_informed = False
 
 
-jump_prob = args.sigma # SIGMA : probability of price jump for fixed trade size model
+jump_prob = args.SIGMA # SIGMA : probability of price jump for fixed trade size model
 vary_jump_prob = False
 jump_size = 1
 jump_at = -100000 # = -1 if no jumps, if positive, then jumps at that time by 1000*jump_size and stays constant
@@ -172,7 +172,6 @@ noise_variance = 1
 
 from env import GlostenMilgromEnv, discretized_gaussian
 from agent import DQN_Agent,QLearningAgent,QLearningAgentUpperConf,BayesianAgent, save_checkpoint, load_checkpoint
-from plot import get_average_plot
 
 # Create the environment
 env = GlostenMilgromEnv(
@@ -330,7 +329,7 @@ else:
     else:
         print("ERROR_UNKNOWN_AGENT_TYPE")
 
-if compare_with_bayes or compare_with_normal:
+if compare_with_bayes:
     n_states_bayes = 2*max_history_len + 1
     bayesian_agent = BayesianAgent(
         n_actions=[env.action_space[0].n,env.action_space[1].n], 
@@ -524,9 +523,7 @@ for episode in tqdm(range(max_episodes)):
                     ask_vs_time_compare[time-1] /= max_episodes
                     bid_vs_time_compare[time-1] /= max_episodes
                     mid_price_vs_time_compare[time-1] /= max_episodes
-        if compare_with_bayes or compare_with_normal :
-            if compare_with_normal:
-                env_bayes.normal_AMM = True                
+        if compare_with_bayes:              
             action = bayesian_agent.choose_action(state_bayes,epsilon=epsilon**time)
             
             (next_trade_history, next_imbalance), reward, done, extra_dict = env_bayes.step(action)
@@ -647,7 +644,7 @@ if compare:
     print("Mean spread reference",np.mean(np.array(spread_vs_time_bayes)))
     print("Mean mid dev reference",np.mean(abs(np.array(mid_price_vs_time_compare)-np.array(p_ext_vs_time))))
     print(" ")
-if compare_with_bayes or compare_with_normal:
+if compare_with_bayes:
     average_total_reward_bayes = np.mean(total_rewards_bayes)
     average_monetary_loss_bayes = np.mean(monetary_losses_bayes)
     print("Average total reward reference:", average_total_reward_bayes/max_episode_len)
@@ -690,7 +687,7 @@ with open('losses_and_spreads_modified.csv', 'a', newline='') as csvfile:
 plt.plot(monetary_losses)
 if compare:
     plt.plot(monetary_losses_compare)
-if compare_with_bayes or compare_with_normal:
+if compare_with_bayes:
     plt.plot(monetary_losses_bayes)
 plt.xlabel("Episode Number")
 plt.ylabel("Average Monetary Loss vs time")
@@ -706,7 +703,7 @@ plt.close()
 plt.plot(total_rewards)
 if compare:
     plt.plot(total_rewards_compare)
-if compare_with_bayes or compare_with_normal:
+if compare_with_bayes:
     plt.plot(total_rewards_bayes)
 plt.xlabel("Episode Number")
 plt.ylabel("Average total reward")
@@ -723,7 +720,7 @@ plt.close()
 plt.plot(np.convolve(np.array(monetary_losses_vs_time),np.ones(moving_avg)/moving_avg,mode=mode),label="Main")
 if compare:
     plt.plot(np.convolve(np.array(monetary_losses_vs_time_compare),np.ones(moving_avg)/moving_avg,mode=mode),label="compare")
-if compare_with_bayes or compare_with_normal:
+if compare_with_bayes:
     plt.plot(np.convolve(np.array(monetary_losses_vs_time_bayes),np.ones(moving_avg)/moving_avg,mode=mode),label="Reference")
 plt.xlabel("Time")
 plt.ylabel("Monetary Loss")
@@ -755,7 +752,7 @@ fig, ax = plt.subplots()
 ax.plot(np.convolve(np.array(spread_vs_time),np.ones(moving_avg)/moving_avg,mode=mode),label="Q-learning")# spread should decay with time
 # if compare:
 #     plt.plot(np.convolve(np.array(spread_vs_time_compare),np.ones(moving_avg)/moving_avg,mode=mode),label="compare")# spread should decay with time
-if compare_with_bayes or compare_with_normal:
+if compare_with_bayes:
     ax.plot(np.convolve(np.array(spread_vs_time_bayes),np.ones(moving_avg)/moving_avg,mode=mode),label="Bayesian")# spread should decay with time
 if compare:
     ax.plot(np.convolve(np.array(spread_vs_time_compare),np.ones(moving_avg)/moving_avg,mode=mode),label="Bayesian")# spread should decay with time
@@ -826,7 +823,7 @@ if compare:
     file_path = os.path.join(figure_path, filename)
     plt.savefig(file_path)
     plt.close()
-if compare_with_bayes or compare_with_normal:
+if compare_with_bayes:
     fig, ax = plt.subplots()
 
     ax.plot(np.convolve(np.array(p_ext_vs_time),np.ones(moving_avg)/moving_avg,mode=mode), label="$p_{ext}$")
