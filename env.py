@@ -19,6 +19,9 @@ import pandas as pd
 
 from agent import CFMM
 
+import argparse
+
+
 
 def discretized_gaussian(length, variance):
     # Calculate the mean and standard deviation
@@ -510,4 +513,59 @@ class GlostenMilgromEnv(gym.Env):
         else:
             observation = (self.trade_history, self.short_term_imbalance)
         return observation, reward, done, extra_dict
+
+def get_args():
+    parser = argparse.ArgumentParser(description='Glosten-Milgrom market making simulation')
+
+    parser.add_argument('--p_ext', type=float, default=100, help='Initial true price')
+    parser.add_argument('--spread', type=float, default=2, help='Initial spread')
+    parser.add_argument('--mu', type=float, default=0.1, help='Mu parameter')
+    
+    parser.add_argument('--spread_exp', type=float, default=2, help='Spread penalty exponent')
+    parser.add_argument('--max_history_len', type=int, default=21, help='History length for calculating imbalance')
+    parser.add_argument('--max_episode_len', type=int, default=2, help='Number of time slots')
+    parser.add_argument('--max_episodes', type=int, default=120, help='Number of training episodes')
+    parser.add_argument('--ema_base', type=int, default=-1, help='exponential moving average')
+    
+    parser.add_argument('--ALPHA', type=float, default=0.9, help='Percentage of informed traders')
+    parser.add_argument('--vary_informed', type=bool, default=False, help='vary the informed trader proportion')
+    
+    parser.add_argument('--SIGMA', type=float, default=1.0, help='Probability of price jump')
+    parser.add_argument('--vary_jump_prob', type=bool, default=False, help='vary the volatility')
+    
+    parser.add_argument('--jump_size', type=int, default=1, help='Size of price jump')
+    parser.add_argument('--jump_at', type=int, default=-1, help='= -1 if no jumps, if positive, then jumps at that time by 1000*jump_size and stays constant')
+    
+    parser.add_argument('--use_short_term', type=bool, default=False, help='Use short-term imbalance')
+    parser.add_argument('--use_endogynous', type=bool, default=False, help='Use endogenous variables')
+    parser.add_argument('--n_price_adjustments', type=int, default=3, help='Number of actions to adjust mid price')
+    parser.add_argument('--adjust_mid_spread', type=bool, default=False, help='Adjust mid + spread')
+    parser.add_argument('--fixed_spread', type=bool, default=False, help='Fix the spread')
+    
+    parser.add_argument('--use_stored_path', type=bool, default=False, help='Use a generated sample path again')
+    
+    parser.add_argument('--compare', type=bool, default=False, help='Compare with !use_endogynous')
+    parser.add_argument('--compare_with_bayes', type=bool, default=False, help='Compare with bayesian agent')
+    
+    parser.add_argument('--state_is_vec', type=bool, default=False, help='is state a vector')
+    
+    parser.add_argument('--special_string', type=str, help='Special string for output folder')
+    
+    parser.add_argument('--model_transfer', type=bool, default=False, help='Reuse the same agent')
+    
+    parser.add_argument('--agent_type', type=str, default="QT", help='RL agent type (QT, DQN, SARSA)')
+    parser.add_argument('--alpha', type=float, default=0.05, help='Learning rate')
+    parser.add_argument('--gamma', type=float, default=0.99, help='Discount rate of future rewards')
+    parser.add_argument('--epsilon', type=float, default=0.9999, help='Starting exploration probability')
+    
+    parser.add_argument('--mode', type=str, default="valid", help='Mode for moving average calculation')
+    parser.add_argument('--checkpoint_every', type=int, default=1000, help='checkpoint model after training iterations')
+    
+    parser.add_argument('--noise_type', type=str, default="Gaussian", help='Type of noise in trader price belief')
+    # CHOCES FOR NOISE TYPE : "Bernoulli", "Gaussian", "Laplacian", "GeomGaussian"
+    parser.add_argument('--noise_mean', type=float, default=0.0, help='mean of the noise')
+    parser.add_argument('--noise_variance', type=float, default=25, help='variance of the noise')
+
+    args = parser.parse_args()
+    return args
 
