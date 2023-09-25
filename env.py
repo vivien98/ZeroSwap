@@ -19,26 +19,6 @@ import pandas as pd
 
 from agent import CFMM
 
-def bayesian_demand_curve(belief,noise,tick,asset_amount,numeraire_amount):
-    weighted_belief = np.multiply(tick*np.arange(belief.size),belief)
-
-    convolved_vec = np.convolve(belief,noise,'same')
-    weighted_convolved_vec = np.convolve(weighted_belief,noise,'same')
-
-    beta_vec = np.divide(weighted_convolved_vec,convolved_vec)
-    beta_vec = np.nan_to_num(beta_vec, nan=np.inf)
-
-    # # Convert the numpy array to pandas Series for easier NaN handling
-    # s = pd.Series(beta_vec)
-    # s.ffill(inplace=True)
-    # s.bfill(inplace=True)
-    # beta_vec_mod = s.to_numpy()
-    plt.plot(np.abs(beta_vec - tick*np.arange(belief.size)))
-    plt.show()
-    p_0_index = np.argmin(np.abs(beta_vec - tick*np.arange(belief.size)))
-    
-    return p_0_index*tick
-
 
 def discretized_gaussian(length, variance):
     # Calculate the mean and standard deviation
@@ -55,14 +35,6 @@ def discretized_gaussian(length, variance):
     distribution /= distribution.sum()
 
     return distribution
-
-def bayesian_posterior(belief,noise,tick,trader_price):
-    trader_price_idx = int(trader_price/tick)
-    posterior = np.array([ 0 if trader_price_idx-idx>=int(noise.size/2) or trader_price_idx-idx<-int(noise.size/2) else belief[idx]*noise[trader_price_idx-idx+int(noise.size/2)] for idx in range(belief.size)])
-    posterior = posterior/np.sum(posterior)
-    
-    return posterior
-
 
 
 
@@ -146,14 +118,12 @@ class GlostenMilgromEnv(gym.Env):
         self.belief[1000] = 1
         self.belief_vals = np.arange(len(self.belief))-(len(self.belief)-1)/2+self.belief_center
         self.noise_pdf = discretized_gaussian(200,noise_variance)
-        self.kalman_dict = {"P":0.0, "p_ext":self.p_ext}
 
         x_0 = 100000
         self.bayesian_AMM = CFMM([x_0,self.p_ext*x_0],"mean",[0.5],0)
         self.normal_AMM = normal_AMM
         
         self.generate_path(jump_at=self.jump_at)
-        self.generate_path_variable_trade_size(jump_at=jump_at)
 
         if self.adjust_mid_spread:
             self.action_space = MultiDiscrete([self.n_price_adjustments, 3])  # Two discrete variables: mid and spread price increments
@@ -191,7 +161,6 @@ class GlostenMilgromEnv(gym.Env):
         self.belief_center = self.current_p_ext
         self.belief[1000] = 1
         self.belief_vals = np.arange(len(self.belief))-(len(self.belief)-1)/2+self.belief_center
-        self.kalman_dict = {"P":0.0, "p_ext":self.p_ext}
 
         x_0 = 100000
         self.bayesian_AMM = CFMM([x_0,self.p_ext*x_0],"mean",[0.5],0)
@@ -277,38 +246,6 @@ class GlostenMilgromEnv(gym.Env):
             trader_price = np.random.lognormal(self.current_p_ext ,self.noise_variance)
         
         return trader_price
-
-    def generate_path_variable_trade_size(self, jump_at=-1):
-        buffer = 10
-        next_p_ext = self.current_p_ext
-        self.price_path_variable = [next_p_ext]
-        self.trader_price_path_variable = []
-        jump_size = self.jump_size
-        
-        for t in range(self.max_episode_len+buffer-1):
-            if t==jump_at:
-                next_p_ext += 1000*jump_size
-                jump_size=0
-
-            next_p_ext = next_p_ext+np.random.normal(0,math.sqrt(self.jump_variance)) 
-            
-            self.price_path_variable.append(next_p_ext)
-
-        if self.noise_type == "Bernoulli":
-            trader_type_path = np.random.choice([True, False], size=(self.max_episode_len+buffer), p=[self.informed, 1-self.informed])
-            for t in range(self.max_episode_len+buffer):
-                if trader_type_path[t] : # informed trader
-                    trader_price = self.price_path_variable[t]
-                else:
-                    trader_price = np.random.choice([np.inf, -np.inf])
-                self.trader_price_path_variable.append(trader_price)        
-        elif self.noise_type == "Gaussian":
-            self.trader_price_path_variable = np.array(self.price_path_variable)+np.random.normal(0,math.sqrt(self.noise_variance),size=(self.max_episode_len+buffer))    
-        elif self.noise_type == "Laplacian":
-            self.trader_price_path_variable = np.array(self.price_path_variable)+np.random.laplace(0 ,math.sqrt(self.noise_variance/2),size=(self.max_episode_len+buffer))
-        elif self.noise_type == "GeomGaussian":
-            self.trader_price_path_variable = np.array(self.price_path_variable)+np.random.lognormal(0 ,math.sqrt(self.noise_variance),size=(self.max_episode_len+buffer))
-        
             
     def get_noisy_measurement_of_price(self,variable=False):
         if self.use_stored_path:
@@ -564,7 +501,6 @@ class GlostenMilgromEnv(gym.Env):
 
         if not done:
             self.current_p_ext = next_p_ext
-            #_ = bayesian_demand_curve(self.belief,self.noise_pdf,1,100,100)
         
         if self.use_endogynous:
             if self.use_short_term:
@@ -575,170 +511,3 @@ class GlostenMilgromEnv(gym.Env):
             observation = (self.trade_history, self.short_term_imbalance)
         return observation, reward, done, extra_dict
 
-#_____________________________VARIABLE TRADE SIZE_______________________________#
-
-    def step_variable(self, action):
-        extra_dict = {}
-        # print("1")
-        # plt.plot(self.belief)
-        # plt.show()
-        reward = 0
-        if action == 0:# bayesian algo with known params
-            if self.kalman_dict["P"]==0:
-                p_0 = self.current_p_ext
-            else:
-                p_0 = self.kalman_dict["p_ext"]
-            #p_0 = bayesian_demand_curve(self.belief,self.noise_pdf,1,100,100)
-            theta = p_0*self.bayesian_AMM.reserves[0]/(self.bayesian_AMM.reserves[1]+p_0*self.bayesian_AMM.reserves[0])
-            self.mid = p_0
-            if not self.normal_AMM:
-                self.bayesian_AMM.modify([theta])
-            print(self.mid," ",theta," ",self.bayesian_AMM.reserves[0]," ",self.bayesian_AMM.reserves[1])
-        elif action == -1:# bayesian algo with unknown params
-            pass
-        else:
-            if self.adjust_mid_spread:
-                # Extract bid and ask price, and slippage adjustments from the action
-                mid_adjustment, spread_adjustment, slippage_adjustment = action
-                mid_adjustment -= (self.n_price_adjustments-1)/2  # Shift the range to -k to +k
-                spread_adjustment -= 1.0
-                slippage_adjustment -= (self.n_slippage_adjustments-1)/2
-                self.mid += mid_adjustment
-                self.spread += spread_adjustment
-                # print(self.mid)
-                if self.fixed_spread:
-                    self.spread = 6
-                else:
-                    self.spread = min(100,max(2,self.spread))
-                # Update the bid and ask prices based on the adjustments
-                self.bid_price = self.mid - self.spread/2
-                self.ask_price = self.mid + self.spread/2
-                self.slippage += slippage_adjustment
-                self.slippage = max(0.01,self.slippage)
-        
-        # Get noisy measurement of what the trader believes the price to be and behaves accordingly
-        trader_price = self.get_noisy_measurement_of_price(variable=True)
-        #print(self.current_p_ext," , ",trader_price)
-
-        if action == 0:
-            bayesian_trade = self.bayesian_AMM.update(trader_price)
-            trade_action = bayesian_trade[0]
-            trade_price = abs(bayesian_trade[1]/bayesian_trade[0])
-            self.belief = bayesian_posterior(self.belief,self.noise_pdf,1,trader_price)
-
-            K_t = (self.kalman_dict["P"]+self.jump_variance)/(self.kalman_dict["P"]+self.jump_variance+self.noise_variance)
-            self.kalman_dict["p_ext"] = (1-K_t)*self.kalman_dict["p_ext"] + K_t*trader_price
-            self.kalman_dict["P"] = (1-K_t)*(self.kalman_dict["P"]+self.jump_variance)
-
-        elif action == -1:# bayesian algo with unknown params
-            pass
-        else:
-            if trader_price > self.ask_price:
-                trade_action = min(self.max_trade_size,(trader_price - self.ask_price)/self.slippage)  # Buy trade
-            elif trader_price < self.bid_price:
-                trade_action = -min(self.max_trade_size,(self.bid_price - trader_price)/self.slippage)  # Sell trade
-            else:
-                trade_action = 0  # Hold
-
-        # print("2")
-        # plt.plot(self.belief)
-        # plt.show()
-        # Update trade history and imbalances
-        previous_imbalance = self.imbalance
-        previous_short_term_imbalance = self.short_term_imbalance
-
-        self.trade_history = np.roll(self.trade_history, shift=-1, axis=0)
-        self.trade_history[-1] = trade_action
-        if self.ema_base == -1:
-            self.short_term_imbalance = np.sum(self.trade_history)
-        else:
-            self.short_term_imbalance = self.trade_history[-1] + self.ema_base * previous_short_term_imbalance
-            self.short_term_imbalance = min(self.max_history_len,max(-self.max_history_len,round(self.short_term_imbalance[0])))
-        self.imbalance += trade_action
-
-        # Calculate monetary loss/profit
-        prev_monetary_loss = self.cumulative_monetary_loss
-
-        self.cumulative_monetary_loss += (trade_price - self.current_p_ext)*np.sign(trade_action)
-
-        if trade_action > 0:
-            self.bid_price = trade_price
-        elif trade_action < 0:
-            self.ask_price = trade_price
-        
-        monetary_loss_step = self.cumulative_monetary_loss - prev_monetary_loss
-
-
-        # Calculate the reward
-        if self.use_endogynous:
-            if self.use_short_term:
-                #reward += np.absolute(previous_short_term_imbalance) - np.absolute(self.short_term_imbalance) #- self.mu * ((self.ask_price - self.bid_price )) 
-                reward += np.square(previous_short_term_imbalance) - np.square(self.short_term_imbalance) #- self.mu * ((self.ask_price - self.bid_price )) 
-            else:
-                reward += np.square(previous_imbalance) - np.square(self.imbalance) #- self.mu * ((self.ask_price - self.bid_price ))        
-        else:
-            reward += monetary_loss_step #- self.mu * ((self.ask_price - self.bid_price ))
-        
-        if not self.fixed_spread:
-            reward -= self.mu*(self.ask_price - self.bid_price + self.slippage*self.max_trade_size)**self.spread_exp
-            
-        if not self.adjust_mid_spread:
-            if trade_action == 1:
-                reward += -0.1*self.ask_price
-            elif trade_action == -1:
-                reward += 0.1*self.bid_price
-        
-        if self.vary_informed:
-            self.informed += np.random.choice([-0.01, 0.01])
-            self.informed = np.clip(self.informed, 0, 1)
-            self.informed_arr.append(self.informed)
-            
-        if self.vary_jump_prob:
-            self.jump_prob += np.random.choice([-0.01, 0.01])
-            self.jump_prob = np.clip(self.jump_prob, 0, 1)
-            self.jump_prob_arr.append(self.jump_prob)
-            
-        # Check if the episode is done
-        done = self.time_step >= self.max_episode_len
-        self.time_step += 1
-
-        # Update the current true price
-        if self.use_stored_path:
-            next_p_ext = self.price_path_variable[self.time_step]
-        else:
-            next_p_ext = round(np.random.normal(self.current_p_ext,math.sqrt(self.jump_variance))) 
-            # jump = np.random.choice(["jump up","jump down", "no jump"], p=[self.jump_prob/2, self.jump_prob/2, 1-self.jump_prob])
-            # next_p_ext = self.current_p_ext
-            # if jump == "jump up":
-            #     next_p_ext = self.current_p_ext + self.jump_size#min(self.current_p_ext + 1,200)
-            # if jump == "jump down":
-            #     next_p_ext = self.current_p_ext - self.jump_size#max(0,self.current_p_ext - 1)
-        
-        if action == 0:
-            self.bayesian_belief_update("price jump",variable=True,unknown=False)
-        elif action == -1:# bayesian algo with unknonwn params
-            self.bayesian_belief_update("price jump",variable=True,unknown=True)
-            
-        # print("3")
-        # plt.plot(self.belief)
-        # plt.show()
-
-        extra_dict["monetary_loss"] = monetary_loss_step
-        extra_dict["ask"] = self.ask_price
-        extra_dict["bid"] = self.bid_price
-        extra_dict["spread"] = self.ask_price - self.bid_price
-        extra_dict["mid"] = (self.ask_price + self.bid_price)/2
-        extra_dict["p_ext"] = self.current_p_ext
-        
-
-        if not done:
-            self.current_p_ext = next_p_ext
-        
-        if self.use_endogynous:
-            if self.use_short_term:
-                observation = (self.trade_history, self.short_term_imbalance)
-            else:
-                observation = (self.trade_history, self.imbalance)
-        else:
-            observation = (self.trade_history, self.short_term_imbalance)
-        return observation, reward, done, extra_dict
