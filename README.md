@@ -22,7 +22,7 @@ This file plots the monetary loss comparison averaged over multiple simulations 
 
 ## main_notebook.ipynb
 
-Same `main.py` but in a Jupyter notebook format. ALso shows the output plots in the notebook in addition to storing them.
+Same as `main.py` but in a Jupyter notebook format. Also shows the output plots in the notebook in addition to storing them.
 
 ## env.py
 
