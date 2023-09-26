@@ -31,3 +31,18 @@ This file contains all the code to initialize and run the Glosten-Milgrom model 
 ## agent.py
 
 This file contains all the code for initializing and training RL agents on the Glosten-Milgrom environment.
+
+## requirements.txt
+
+The python packages used have been listed in the`requirements.txt`. They can be installed using the following command.
+
+```
+pip install -r requirements.txt`
+```
+
+Alternatively, they can be installed using `conda` in a new environment called `zeroswap`.
+```
+conda create --name zeroswap python=3.8
+conda activate zeroswap
+conda install gym numpy matplotlib torch scipy pandas tqdm
+```
