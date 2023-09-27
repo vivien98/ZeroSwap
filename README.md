@@ -37,7 +37,7 @@ This file contains all the code for initializing and training RL agents on the G
 The python packages used have been listed in the`requirements.txt`. They can be installed using the following command.
 
 ```
-pip install -r requirements.txt`
+pip install -r requirements.txt
 ```
 
 Alternatively, they can be installed using `conda` in a new environment called `zeroswap`.
